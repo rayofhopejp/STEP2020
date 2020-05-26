@@ -17,5 +17,5 @@ main = do
     t1 <- getCurrentTime
     let c= matrixproduct a b
     t2 <- getCurrentTime
-    print c
     putStrLn $ show $ diffUTCTime t2 t1
+    print $ sum [sum x | x<-c]

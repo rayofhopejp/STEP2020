@@ -24,16 +24,16 @@ for i in range(n):
         for k in range(n):
             c[i,j]+=a[i,k]*b[k,j]
 
-
 end = time.time()
 print("%.6f" % (end - begin))
 
-# Print C for debugging. Comment out the print before measuring the execution time.
-#total = 0
-#for i in range(n):
-#    for j in range(n):
-#        #print(c[i, j])
-#        total += c[i, j]
+
+#Print C for debugging. Comment out the print before measuring the execution time.
+total = 0
+for i in range(n):
+    for j in range(n):
+        #print(c[i, j])
+        total += c[i, j]
 # Print out the sum of all values in C.
 # This should be 450 for N=3, 3680 for N=4, and 18250 for N=5.
-#print("sum: %.6f" % total)
+print("sum: %.6f" % total)

@@ -16,6 +16,6 @@ main = do
     let b=[[j*n+i | j<-[0..n-1]] | i<-[0..n-1]]
     t1 <- getCurrentTime
     let c= matrixproduct a b
+    print $ sum [sum x | x<-c] --Cを評価する
     t2 <- getCurrentTime
     putStrLn $ show $ diffUTCTime t2 t1
-    print $ sum [sum x | x<-c]

@@ -17,6 +17,8 @@ def read_graph_data(linksfile,namesfile):
 #adrianからあなたに行けるか？
 def isConnected_BFS(graph,A,B): #AとBがグラフ上で連結しているかと、最短距離をBFSでもとめる
     #BFSは重みなしグラフの単一始点最短経路問題において最も効率が良いアルゴリズムである。
+    if A not in graph or B not in graph:
+        return "そのような人はいません"
     now=[A,] 
     visited={ k:0 for k in graph.keys()}
     visited[A]=1
@@ -29,12 +31,12 @@ def isConnected_BFS(graph,A,B): #AとBがグラフ上で連結しているかと
         for i in now:
             for next_node in graph[i]: 
                 if next_node==B:
-                    return count
+                    return str(count)+"回辺を辿れば到達できます"
                 if  visited[next_node]==0:
                     visited[next_node]=1
                     nxt.append(next_node)
         now=nxt
-    return -1
+    return "到達できません"
 
 def count_betweeness(graph): 
     edge_betweeness={}#(from,to):edge betweeness
@@ -95,7 +97,8 @@ def connected_groups(graph_directed):
 def grouping_girvan_newman(graph,N):
     new_graph=copy.deepcopy(graph)
     connected_groups_now=connected_groups(new_graph)
-    print(len(connected_groups_now),connected_groups_now,sep='groups\n') #最初の連結成分
+    #最初の連結成分
+    #print(len(connected_groups_now),connected_groups_now,sep='groups\n')
     while True:
         groups=[]
         #1.残っている全てのリンクのedge betweennessを計算する。
@@ -109,7 +112,14 @@ def grouping_girvan_newman(graph,N):
         if len(connected_groups_now)>=N:
             return len(connected_groups_now),connected_groups_now
 
-#graphは隣接リスト
-graph=read_graph_data("./sns_links/links.txt","./sns_links/nicknames.txt")
-print(isConnected_BFS(graph,'adrian','edwin'))
-print(*grouping_girvan_newman(graph,30),sep='groups\n')
+
+if __name__=='__main__':
+    #graphは隣接リスト
+    graph=read_graph_data("./sns_links/links.txt","./sns_links/nicknames.txt")
+    print("Calcurate shortest distance... please input nicknames")
+    nickname_from=input("from:")
+    nickname_to=input("to:")
+    print(isConnected_BFS(graph,nickname_from, nickname_to))
+    print("Divide members to N groups:")
+    N=int(input("N:"))
+    print(*grouping_girvan_newman(graph,N),sep='groups\n')

@@ -46,6 +46,7 @@ def dijkstra(graph,start,end):
     return list(reversed(route)),distances[end]
 
 import queue
+import heapq
 def count_betweeness_Brandes(graph):#ノード、辺の媒介中心性の計算
     edge_betweeness={}#(from,to):edge betweeness
     for frm,tos in graph.items():#全てのノードを追加
@@ -56,32 +57,40 @@ def count_betweeness_Brandes(graph):#ノード、辺の媒介中心性の計算
     #ちなみにノードの中心媒介性はそのまま用いてもノードの重要度の指標になりそう。
     C_b={k:0 for k in graph.keys()}
     for s in graph.keys():
-        S=[] #stack
         P={k:[] for k in graph.keys()} #P[v]:頂点vに向かう最短経路において前に通った頂点のリスト
         sigma={k:0 for k in graph.keys()}#最短経路の数
         sigma[s]=1
         d={k:-1 for k in graph.keys()}#P[v]:sからvへの最短距離
         d[s]=0
-        #ここは普通にBFSを行っている
-        Q=queue.Queue()
-        Q.put(s)
-        while not Q.empty():
-            v=Q.get()
-            S.append(v)#sから近い順に（最短距離が単調増加に）格納される
+        #ここは普通にDijkstraを行っている
+        Q=[]
+        heapq.heapify(Q)
+        heapq.heappush(Q, (0,s))
+        while len(Q)>0:
+            #print(Q)
+            nowcost,v=heapq.heappop(Q)
+            if d[v]<nowcost:
+                continue
+            assert(d[v]==nowcost)
             for w,cost in graph[v]:
                 if d[w]<0:
-                    Q.put(w)
                     d[w]=d[v]+cost
+                    heapq.heappush(Q, (d[w],w))
                 if d[w]==d[v]+cost:
-                    sigma[w]+=sigma[v]
                     P[w].append(v)
+                    sigma[w]+=sigma[v]
                 if d[w]>d[v]+cost:
                     d[w]=d[v]+cost
-                    P[w]=[v,]
+                    heapq.heappush(Q, (d[w],w))
+                    P[w]=[v,]#今までの記録は捨てる
+                    sigma[w]=sigma[v]#今までの記録は捨てる
+        #Sは全ての到達できるノードがsから近い順に並んでいる状態にする
+        S=[k for k,v in sorted(d.items(), key=lambda x:x[1])]#最短経路長でソート
         delta={k:0 for k in graph.keys()}#これはsを始点とした時の頂点kの媒介中心性が求まる
         delta_edge={k:0 for k in edge_betweeness.keys()}#これはsを始点とした時のedgeの媒介中心性が求まる
         while len(S)>0:
             to=S.pop()#これは必ずsから遠い順に取り出される
+            #print(d[to],end=",")
             for frm in P[to]:#toの前に通った頂点frmに対して
                 delta[frm]+=sigma[frm]/sigma[to]*(1+delta[to])
                 #toの媒介中心性(決定済み)にsigma[frm]/sigma[to]をかければ辺の媒介性が求まる
@@ -169,9 +178,10 @@ node_betweeness,edge_betweeness=count_betweeness_Brandes(graph)
 #print(node_betweeness)
 important_station=max(node_betweeness, key=node_betweeness.get)
 print(important_station)
-#ちなみにわかりやすくいうと、終着点のnode_betweenessは必ず0になっているはずである。
+#ちなみに
+print("終着点の媒介中心性は必ず0になっているはずである。")
 #例えば
-print(node_betweeness["三鷹"])
+print("「三鷹」の媒介中心性",node_betweeness["三鷹"])
 
 if __name__=='__main__':
     while True:

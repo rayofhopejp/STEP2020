@@ -1,3 +1,4 @@
+import copy
 #グラフは隣接リストで実装する
 #グラフの読み込み
 def read_graph_data(linksfile,namesfile):
@@ -51,7 +52,7 @@ def count_betweeness_Brandes(graph):#ノード、辺の媒介中心性の計算
     edge_betweeness={}#(from,to):edge betweeness
     for frm,tos in graph.items():#全てのノードを追加
         for to,cost in tos:
-            edge_betweeness[(frm,to)]=0
+            edge_betweeness[(frm,to,cost)]=0
     #algorithm:https://www.eecs.wsu.edu/~assefaw/CptS580-06/papers/brandes01centrality.pdf
     #は頂点の媒介中心性を求めているので、それを辺にも応用したもの
     #ちなみにノードの中心媒介性はそのまま用いてもノードの重要度の指標になりそう。
@@ -77,12 +78,12 @@ def count_betweeness_Brandes(graph):#ノード、辺の媒介中心性の計算
                     d[w]=d[v]+cost
                     heapq.heappush(Q, (d[w],w))
                 if d[w]==d[v]+cost:
-                    P[w].append(v)
+                    P[w].append((v,cost))
                     sigma[w]+=sigma[v]
                 if d[w]>d[v]+cost:
                     d[w]=d[v]+cost
                     heapq.heappush(Q, (d[w],w))
-                    P[w]=[v,]#今までの記録は捨てる
+                    P[w]=[(v,cost),]#今までの記録は捨てる
                     sigma[w]=sigma[v]#今までの記録は捨てる
         #Sは全ての到達できるノードがsから近い順に並んでいる状態にする
         S=[k for k,v in sorted(d.items(), key=lambda x:x[1])]#最短経路長でソート
@@ -91,37 +92,33 @@ def count_betweeness_Brandes(graph):#ノード、辺の媒介中心性の計算
         while len(S)>0:
             to=S.pop()#これは必ずsから遠い順に取り出される
             #print(d[to],end=",")
-            for frm in P[to]:#toの前に通った頂点frmに対して
+            for frm,cost in P[to]:#toの前に通った頂点frmに対して
                 delta[frm]+=sigma[frm]/sigma[to]*(1+delta[to])
                 #toの媒介中心性(決定済み)にsigma[frm]/sigma[to]をかければ辺の媒介性が求まる
-                edge_betweeness[(frm,to)]+=(sigma[frm]/sigma[to])*delta[to]
+                edge_betweeness[(frm,to,cost)]+=(sigma[frm]/sigma[to])*delta[to]
             if to!=s:
                 C_b[to]+=delta[to]
     return C_b,edge_betweeness
 
 
-def connected_groups(graph_directed):
+def connected_groups(graph_nondirected):
     #連結であるとは、そのグループの中のどの2頂点を選んでもどちらか一方向に道が存在することとする。
-    #無向グラフにしておく（ちょっとアレな手法かもしれない…）
-    graph=copy.deepcopy(graph_directed)
-    for frm,tos in graph.items():
-        for to in tos:
-            if frm not in graph[to]:
-                graph[to].append(frm)
+    #このグラフはもともと無向グラフ
     groups=[]
-    not_connected=[k for k in graph.keys()]
+    not_connected=[k for k in graph_nondirected.keys()]
     while len(not_connected)>0:#全てのノードを始点としてBFSを行う
+        
         start=not_connected.pop()
         group=[start,]
         now=[start,] 
-        visited={ k:0 for k in graph.keys()}
+        visited={ k:0 for k in graph_nondirected.keys()}
         visited[start]=1
         count=0
         while len(now)>0:
             count+=1
             nxt=[]
             for i in now:
-                for next_node in graph[i]: 
+                for next_node,cost in graph_nondirected[i]: 
                     if  visited[next_node]==0:
                         group.append(next_node)
                         assert(next_node in not_connected)#無向グラフならこの条件を満たすはず
@@ -137,8 +134,6 @@ def grouping_girvan_newman(graph,N):
     new_graph=copy.deepcopy(graph)
     connected_groups_now=connected_groups(new_graph)
     #最初の連結成分
-    print("初期状態：")
-    print(str(len(connected_groups_now))+"groups",*connected_groups_now,sep='\n')
     while True:
         groups=[]
         #1.残っている全てのリンクのedge betweennessを計算する
@@ -152,9 +147,10 @@ def grouping_girvan_newman(graph,N):
             connected_groups_now=connected_groups(new_graph)
             return len(connected_groups_now),connected_groups(new_graph)
         #2.そうでない場合、最もedge betweenessが高いリンクを切る。
-        max_edge_from,max_edge_to=max(edge_betweeness, key=edge_betweeness.get)
-        #print("removed:",max_edge_from,max_edge_to,edge_betweeness[(max_edge_from,max_edge_to)])
-        new_graph[max_edge_from].remove(max_edge_to)
+        max_edge_from,max_edge_to,max_edge_cost=max(edge_betweeness, key=edge_betweeness.get)
+        #print(max_edge_from,max_edge_to, max_edge_cost)
+        new_graph[max_edge_from].remove([max_edge_to,max_edge_cost])
+        new_graph[max_edge_to].remove([max_edge_from,max_edge_cost])
         #3.1-2を、連結成分がN個になるまで繰り返す。
         connected_groups_now=connected_groups(new_graph)
         if len(connected_groups_now)>=N:
@@ -182,6 +178,10 @@ print(important_station)
 print("終着点の媒介中心性は必ず0になっているはずである。")
 #例えば
 print("「三鷹」の媒介中心性",node_betweeness["三鷹"])
+print("10グループに分割してみる")
+groupnum,groups=grouping_girvan_newman(graph,10)
+print(groupnum,"groups:")
+print(*groups,sep='\n')
 
 if __name__=='__main__':
     while True:

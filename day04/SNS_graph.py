@@ -80,29 +80,35 @@ def count_betweeness_Brandes(graph):#ノード、辺の媒介中心性の計算
                 C_b[to]+=delta[to]
     return C_b,edge_betweeness
 
-
-def connected_groups(graph_directed):
-    #連結であるとは、そのグループの中のどの2頂点を選んでもどちらか一方向に道が存在することとする。
+def nondirectize_graph(graph_directed):
+    #連結であるとは、そのグループの中のどの2頂点を選んでもどちらにも道が存在することとする。
     #無向グラフにしておく（ちょっとアレな手法かもしれない…）
-    graph=copy.deepcopy(graph_directed)
-    for frm,tos in graph.items():
+    graph_nondirected={k:[] for k in graph_directed.keys()}
+    for frm,tos in graph_directed.items():
         for to in tos:
-            if frm not in graph[to]:
-                graph[to].append(frm)
+            if frm in graph_directed[to]:
+                graph_nondirected[frm].append(to)
+    return graph_nondirected
+
+
+def connected_groups(graph_nondirected):
+    #連結であるとは、そのグループの中のどの2頂点を選んでもどちらにもに道が存在することとする。
+    #このグラフはもともと無向グラフ
     groups=[]
-    not_connected=[k for k in graph.keys()]
+    not_connected=[k for k in graph_nondirected.keys()]
     while len(not_connected)>0:#全てのノードを始点としてBFSを行う
+        
         start=not_connected.pop()
         group=[start,]
         now=[start,] 
-        visited={ k:0 for k in graph.keys()}
+        visited={ k:0 for k in graph_nondirected.keys()}
         visited[start]=1
         count=0
         while len(now)>0:
             count+=1
             nxt=[]
             for i in now:
-                for next_node in graph[i]: 
+                for next_node in graph_nondirected[i]: 
                     if  visited[next_node]==0:
                         group.append(next_node)
                         assert(next_node in not_connected)#無向グラフならこの条件を満たすはず
@@ -130,32 +136,32 @@ def grouping_girvan_newman(graph,N):
         #辺を切ることをやめる
         if max(node_betweeness.values())==0:
             print("到達できる場合最短経路長は必ず1である状態です。")
-            connected_groups_now=connected_groups(new_graph)
-            return len(connected_groups_now),connected_groups(new_graph)
+            connected_groups_now=connected_groups(nondirectize_graph(new_graph))
+            return len(connected_groups_now),connected_groups_now
         #2.そうでない場合、最もedge betweenessが高いリンクを切る。
         max_edge_from,max_edge_to=max(edge_betweeness, key=edge_betweeness.get)
         #print("removed:",max_edge_from,max_edge_to,edge_betweeness[(max_edge_from,max_edge_to)])
         new_graph[max_edge_from].remove(max_edge_to)
         #3.1-2を、連結成分がN個になるまで繰り返す。
-        connected_groups_now=connected_groups(new_graph)
+        connected_groups_now=connected_groups(nondirectize_graph(new_graph))
         if len(connected_groups_now)>=N:
             return len(connected_groups_now),connected_groups_now
 
 
 if __name__=='__main__':
     #graphは隣接リスト
-    graph=read_graph_data("./sns_links/links.txt","./sns_links/nicknames.txt")
+    Graph=read_graph_data("./sns_links/links.txt","./sns_links/nicknames.txt")
     print("Calcurate shortest distance... please input nicknames")
     nickname_from=input("from:")
     nickname_to=input("to:")
-    print(isConnected_BFS(graph,nickname_from, nickname_to))
+    print(isConnected_BFS(Graph,nickname_from, nickname_to))
     print("最も中心媒介性が高い人物を選びました。")
-    node_betweeness,edge_betweeness=count_betweeness_Brandes(graph)
+    node_betweeness,edge_betweeness=count_betweeness_Brandes(Graph)
     important_person=max(node_betweeness, key=node_betweeness.get)
     print(important_person)
     print("Divide members to N groups:")
     N=int(input("N:"))
-    groupnum,groups=grouping_girvan_newman(graph,N)
+    groupnum,groups=grouping_girvan_newman(Graph,N)
     print(groupnum,"groups:")
     print(*groups,sep='\n')
     

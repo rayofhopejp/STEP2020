@@ -220,7 +220,18 @@ typedef struct my_heap_t {
   my_metadata_t dummy;
 } my_heap_t;
 
-my_heap_t my_heap;
+const int HEAP_NUMBER=512;
+//0:16 1:24 2:32....510:4096(以上)のfree領域を収納(ちょっとズルで、テストケースに8の倍数かつ16の倍数でない、4096より小さいmallocが多いから)
+my_heap_t my_heap[HEAP_NUMBER];
+
+int return_heap_num(size_t size){
+  assert(size%8==0);
+  if(size>4096)return 510;
+  return (size-16)/8;
+}
+int return_heap_min(int hi){
+  return 16+hi*8;
+}
 
 void my_remove_from_free_list(my_metadata_t* metadata);
 //スロットを、free_listの中がaddress順になるように管理しておく
@@ -231,8 +242,9 @@ void my_add_to_free_list(my_metadata_t* metadata,int ismmaped) {
   //assert(!metadata->prev);
   //assert(!metadata->next);
   size_t size=metadata->size;
-  my_metadata_t* now_address=my_heap.free_head;
-  assert(now_address==&my_heap.dummy);
+  int hi=return_heap_num(size);
+  my_metadata_t* now_address=my_heap[hi].free_head;
+  assert(now_address==&my_heap[hi].dummy);
   //先頭は必ず==&simple_heap.dummyとするので、先頭に挿入されることはない
   //nextがmetadataよりあとの領域になるか、nextがNULLになるまで移動
   while(now_address->next!=NULL&&now_address->next<metadata)now_address=now_address->next;
@@ -246,21 +258,26 @@ void my_add_to_free_list(my_metadata_t* metadata,int ismmaped) {
   metadata->prev=now_address;
   if(next_address!=NULL)next_address->prev=metadata;
   //もし今追加したmetadataが前と統合できる時
-  if(metadata->prev!=&my_heap.dummy){//前がdummyではない時
-    int prev_dist=(int)metadata-(int)metadata->prev;
-    if(prev_dist==metadata->prev->size+sizeof(my_metadata_t)){//+sizeof(my_metadata_t)はprevのmetadataの分
-      //printf("prev_mearge\n");
-      metadata->prev->size+=metadata->size+sizeof(my_metadata_t);//metadataのdataとmetadataのサイズをたす
+  if(metadata->prev!=&my_heap[hi].dummy){//前がdummyではない時
+    size_t prev_dist=(char*)metadata-(char*)metadata->prev;
+    if(prev_dist==metadata->prev->size+sizeof(size_t)){//+sizeof(size_t)はprevのmetadataの分
+      my_metadata_t*  prev_metadata=metadata->prev;
+      my_remove_from_free_list(prev_metadata);
       my_remove_from_free_list(metadata);
+      prev_metadata->size+=metadata->size+sizeof(size_t);//metadataのdataとmetadataのサイズをたす
+      metadata=prev_metadata;
+      my_add_to_free_list(prev_metadata,0);
     }
   }
   //もし今追加したmetadata、または前と統合したあとのmetadataが後ろと統合できる時
   if(metadata->next!=NULL){//末尾ではない時
-    int next_dist=(int)metadata->next-(int)metadata;
-    if(next_dist==metadata->size+sizeof(my_metadata_t)){//+1はmetadataの分
-      //printf("next_mearge\n");
-      metadata->size+=metadata->next->size+sizeof(my_metadata_t);//+sizeof(my_metadata_t)はnextのmetadataのぶん
-      my_remove_from_free_list(metadata->next);
+    size_t next_dist=(char*)metadata->next-(char*)metadata;
+    if(next_dist==metadata->size+sizeof(size_t)){//+sizeof(size_t)はmetadataの分
+      my_metadata_t*  next_metadata=metadata->next;
+      my_remove_from_free_list(next_metadata);
+      my_remove_from_free_list(metadata);
+      metadata->size+=next_metadata->size+sizeof(size_t);//+sizeof(size_t)はnextのmetadataのぶん
+      my_add_to_free_list(metadata,0);
     }
   }
 
@@ -271,7 +288,9 @@ void my_add_to_free_list(my_metadata_t* metadata,int ismmaped) {
   while(metadata->size+sizeof(size_t)>=4096 && //4096バイト以上が空いている
         returnptr%4096==0){//かつそれはmunmapでとってきた領域である
     if(metadata->size>=(uintptr_t)4096+2*sizeof(my_metadata_t*)){//まだ残る場合
+      my_remove_from_free_list(metadata);
       metadata->size=metadata->size-(uintptr_t)4096;
+      my_add_to_free_list(metadata,0);
       munmap_to_system((void*)returnptr,4096);
       returnptr=(int)( (char*)(metadata)+sizeof(size_t)+metadata->size-4096 );
     }else{//残った部分がmetadata(next,prevも含め)を入れられないサイズの場合
@@ -289,7 +308,8 @@ void my_remove_from_free_list(my_metadata_t* metadata) {
   //printf("removenext:%p\n",metadata->next);
   //printf("removeprev:%p\n",metadata->prev);
   //先頭はdummyなのでmetadata->prevは必ず存在する
-  assert(metadata!=&my_heap.dummy);
+  int hi=return_heap_num(metadata->size);
+  assert(metadata!=&my_heap[hi].dummy);
   assert(metadata->prev);
   metadata->prev->next=metadata->next;
   if(metadata->next!=NULL){metadata->next->prev=metadata->prev;}//metadataが末尾に存在する場合は何もしなくて良い
@@ -302,10 +322,12 @@ void my_remove_from_free_list(my_metadata_t* metadata) {
 // This is called only once at the beginning of each challenge.
 void my_initialize() {
   //printf("init ");
-  my_heap.free_head = &my_heap.dummy;
-  my_heap.dummy.size = 0;
-  my_heap.dummy.next = NULL;
-  my_heap.dummy.prev = NULL;
+  for(int hi=0;hi<HEAP_NUMBER;hi++){
+    my_heap[hi].free_head = &my_heap[hi].dummy;
+    my_heap[hi].dummy.size = 0;
+    my_heap[hi].dummy.next = NULL;
+    my_heap[hi].dummy.prev = NULL;
+  }
 }
 
 // This is called every time an object is allocated. |size| is guaranteed
@@ -316,17 +338,32 @@ void* my_malloc(size_t size) {
   //printf("malloc \n");
   //size<2*sizeof(my_metadata_t*)の時、metadataの形式を維持することができないので、sizeを広めにとることにする。
   if(size<2*sizeof(my_metadata_t*))size=2*sizeof(my_metadata_t*);
+  //面倒なのでsizeは8の倍数にする
+  if(size%8!=0)size=(size/8+1)*8;
 
-  my_metadata_t* metadata = my_heap.free_head;
+  int hi=return_heap_num(size);
+  my_metadata_t* metadata = NULL;
   my_metadata_t* best_fit_ite=NULL;
   size_t best_fit_size=(size_t)1001001001;
-  while (metadata) {
-    if(metadata->size >= size && metadata->size < best_fit_size){
-      best_fit_ite =metadata;
-      best_fit_size=metadata->size;
-      if(best_fit_size==size)break;
+  while(best_fit_ite==NULL&&hi<HEAP_NUMBER){
+    printf("hi:%d\n",hi);
+    printf("test::(%lu)\n",*(size_t*)my_heap[hi].free_head);
+    printf("test::(%lu)\n",*(size_t*)my_heap[65].free_head);
+    metadata=my_heap[hi].free_head;
+    printf("test\n");
+    while (metadata) {
+      printf("(%lu)\n",*(size_t*)my_heap[hi].free_head);
+      printf("(%lu)\n",my_heap[hi].dummy.size);
+      printf("%lu||\n",*(size_t*)metadata);
+      if(metadata->size >= size && metadata->size < best_fit_size){
+        best_fit_ite =metadata;
+        best_fit_size=metadata->size;
+        if(size==return_heap_min(hi))break;
+      }
+      metadata = metadata->next;
     }
-    metadata = metadata->next;
+    //もし空なら次のheapへ進む
+    hi++;
   }
   metadata=best_fit_ite;
   if (!metadata) {
